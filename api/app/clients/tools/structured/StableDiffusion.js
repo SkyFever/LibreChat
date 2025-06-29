@@ -99,6 +99,9 @@ class StableDiffusionAPI extends Tool {
       steps: 22,
       width: 1024,
       height: 1024,
+      sampler_name: "Euler",
+      sampler_index: "Euler",
+      scheduler: "Simple",
     };
     let generationResponse;
     try {
