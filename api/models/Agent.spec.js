@@ -1931,7 +1931,7 @@ describe('models/Agent', () => {
       });
 
       // Mock getMCPServerTools to return tools for each server
-      getMCPServerTools.mockImplementation(async (server) => {
+      getMCPServerTools.mockImplementation(async (_userId, server) => {
         if (server === 'server1') {
           return { tool1_mcp_server1: {} };
         } else if (server === 'server2') {
@@ -1960,7 +1960,8 @@ describe('models/Agent', () => {
       });
 
       if (result) {
-        expect(result.id).toBe(EPHEMERAL_AGENT_ID);
+        // Ephemeral agent ID is encoded with endpoint and model
+        expect(result.id).toBe('openai__gpt-4');
         expect(result.instructions).toBe('Test instructions');
         expect(result.provider).toBe('openai');
         expect(result.model).toBe('gpt-4');
@@ -1978,7 +1979,7 @@ describe('models/Agent', () => {
       const mockReq = { user: { id: 'user123' } };
       const result = await loadAgent({
         req: mockReq,
-        agent_id: 'non_existent_agent',
+        agent_id: 'agent_non_existent',
         endpoint: 'openai',
         model_parameters: { model: 'gpt-4' },
       });
@@ -2105,7 +2106,7 @@ describe('models/Agent', () => {
       test('should handle loadAgent with malformed req object', async () => {
         const result = await loadAgent({
           req: null,
-          agent_id: 'test',
+          agent_id: 'agent_test',
           endpoint: 'openai',
           model_parameters: { model: 'gpt-4' },
         });
@@ -2125,7 +2126,7 @@ describe('models/Agent', () => {
         getCachedTools.mockResolvedValue(availableTools);
 
         // Mock getMCPServerTools to return all tools for server1
-        getMCPServerTools.mockImplementation(async (server) => {
+        getMCPServerTools.mockImplementation(async (_userId, server) => {
           if (server === 'server1') {
             return availableTools; // All 100 tools belong to server1
           }
@@ -2674,7 +2675,7 @@ describe('models/Agent', () => {
       });
 
       // Mock getMCPServerTools to return only tools matching the server
-      getMCPServerTools.mockImplementation(async (server) => {
+      getMCPServerTools.mockImplementation(async (_userId, server) => {
         if (server === 'server1') {
           // Only return tool that correctly matches server1 format
           return { tool_mcp_server1: {} };
