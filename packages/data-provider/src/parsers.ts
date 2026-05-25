@@ -6,8 +6,10 @@ import type * as t from './types';
 import { ContentTypes } from './types/runs';
 import {
   openAISchema,
+  openRouterSchema,
   googleSchema,
   EModelEndpoint,
+  Providers,
   anthropicSchema,
   assistantSchema,
   // agentsSchema,
@@ -20,6 +22,7 @@ import { alternateName } from './config';
 
 type EndpointSchema =
   | typeof openAISchema
+  | typeof openRouterSchema
   | typeof googleSchema
   | typeof anthropicSchema
   | typeof assistantSchema
@@ -27,17 +30,37 @@ type EndpointSchema =
   | typeof bedrockInputSchema;
 
 export type EndpointSchemaKey = EModelEndpoint;
+type EndpointSchemaLookupKey = EModelEndpoint | Providers.OPENROUTER;
 
-const endpointSchemas: Record<EndpointSchemaKey, EndpointSchema> = {
+const endpointSchemas: Record<EndpointSchemaLookupKey, EndpointSchema> = {
   [EModelEndpoint.openAI]: openAISchema,
   [EModelEndpoint.azureOpenAI]: openAISchema,
   [EModelEndpoint.custom]: openAISchema,
+  [Providers.OPENROUTER]: openRouterSchema,
   [EModelEndpoint.google]: googleSchema,
   [EModelEndpoint.anthropic]: anthropicSchema,
   [EModelEndpoint.assistants]: assistantSchema,
   [EModelEndpoint.azureAssistants]: assistantSchema,
   [EModelEndpoint.agents]: compactAgentsSchema,
   [EModelEndpoint.bedrock]: bedrockInputSchema,
+};
+
+const isEndpointSchemaLookupKey = (value?: string | null): value is EndpointSchemaLookupKey =>
+  value != null && Object.prototype.hasOwnProperty.call(endpointSchemas, value);
+
+const getFallbackEndpointSchema = <TSchema>(
+  schemas: Record<EndpointSchemaLookupKey, TSchema>,
+  endpointType?: EndpointSchemaKey | null,
+  defaultParamsEndpoint?: string | null,
+): TSchema | undefined => {
+  if (!endpointType) {
+    return undefined;
+  }
+
+  const overrideSchema = isEndpointSchemaLookupKey(defaultParamsEndpoint)
+    ? schemas[defaultParamsEndpoint]
+    : undefined;
+  return overrideSchema ?? schemas[endpointType];
 };
 
 // const schemaCreators: Record<EModelEndpoint, (customSchema: DefaultSchemaValues) => EndpointSchema> = {
@@ -144,26 +167,23 @@ export const parseConvo = ({
   endpointType,
   conversation,
   possibleValues,
+  defaultParamsEndpoint,
 }: {
   endpoint: EndpointSchemaKey;
   endpointType?: EndpointSchemaKey | null;
   conversation: Partial<s.TConversation | s.TPreset> | null;
   possibleValues?: TPossibleValues;
-  // TODO: POC for default schema
-  // defaultSchema?: Partial<EndpointSchema>,
+  defaultParamsEndpoint?: string | null;
 }) => {
-  let schema = endpointSchemas[endpoint] as EndpointSchema | undefined;
+  const primarySchema = endpointSchemas[endpoint] as EndpointSchema | undefined;
 
-  if (!schema && !endpointType) {
+  if (!primarySchema && !endpointType) {
     throw new Error(`Unknown endpoint: ${endpoint}`);
-  } else if (!schema && endpointType) {
-    schema = endpointSchemas[endpointType];
   }
 
-  // if (defaultSchema && schemaCreators[endpoint]) {
-  //   schema = schemaCreators[endpoint](defaultSchema);
-  // }
-
+  const schema =
+    primarySchema ??
+    getFallbackEndpointSchema(endpointSchemas, endpointType, defaultParamsEndpoint);
   const convo = schema?.parse(conversation) as s.TConversation | undefined;
   const { models } = possibleValues ?? {};
 
@@ -227,6 +247,10 @@ export const getResponseSender = (endpointOption: Partial<t.TEndpointOption>): s
       return 'Mistral';
     } else if (model && model.includes('deepseek')) {
       return 'Deepseek';
+    } else if (model && model.includes('kimi')) {
+      return 'Kimi';
+    } else if (model && model.includes('moonshot')) {
+      return 'Moonshot';
     } else if (model && model.includes('gpt-')) {
       const gptVersion = extractGPTVersion(model);
       return gptVersion || 'GPT';
@@ -264,6 +288,10 @@ export const getResponseSender = (endpointOption: Partial<t.TEndpointOption>): s
       return 'Mistral';
     } else if (model && model.includes('deepseek')) {
       return 'Deepseek';
+    } else if (model && model.includes('kimi')) {
+      return 'Kimi';
+    } else if (model && model.includes('moonshot')) {
+      return 'Moonshot';
     } else if (model && model.includes('gpt-')) {
       const gptVersion = extractGPTVersion(model);
       return gptVersion || 'GPT';
@@ -282,13 +310,15 @@ type CompactEndpointSchema =
   | typeof compactAssistantSchema
   | typeof compactAgentsSchema
   | typeof compactGoogleSchema
+  | typeof openRouterSchema
   | typeof anthropicSchema
   | typeof bedrockInputSchema;
 
-const compactEndpointSchemas: Record<EndpointSchemaKey, CompactEndpointSchema> = {
+const compactEndpointSchemas: Record<EndpointSchemaLookupKey, CompactEndpointSchema> = {
   [EModelEndpoint.openAI]: openAISchema,
   [EModelEndpoint.azureOpenAI]: openAISchema,
   [EModelEndpoint.custom]: openAISchema,
+  [Providers.OPENROUTER]: openRouterSchema,
   [EModelEndpoint.assistants]: compactAssistantSchema,
   [EModelEndpoint.azureAssistants]: compactAssistantSchema,
   [EModelEndpoint.agents]: compactAgentsSchema,
@@ -302,25 +332,27 @@ export const parseCompactConvo = ({
   endpointType,
   conversation,
   possibleValues,
+  defaultParamsEndpoint,
 }: {
   endpoint?: EndpointSchemaKey;
   endpointType?: EndpointSchemaKey | null;
   conversation: Partial<s.TConversation | s.TPreset>;
   possibleValues?: TPossibleValues;
-  // TODO: POC for default schema
-  // defaultSchema?: Partial<EndpointSchema>,
+  defaultParamsEndpoint?: string | null;
 }): Omit<s.TConversation, 'iconURL'> | null => {
   if (!endpoint) {
     throw new Error(`undefined endpoint: ${endpoint}`);
   }
 
-  let schema = compactEndpointSchemas[endpoint] as CompactEndpointSchema | undefined;
+  const primarySchema = compactEndpointSchemas[endpoint] as CompactEndpointSchema | undefined;
 
-  if (!schema && !endpointType) {
+  if (!primarySchema && !endpointType) {
     throw new Error(`Unknown endpoint: ${endpoint}`);
-  } else if (!schema && endpointType) {
-    schema = compactEndpointSchemas[endpointType];
   }
+
+  const schema =
+    primarySchema ??
+    getFallbackEndpointSchema(compactEndpointSchemas, endpointType, defaultParamsEndpoint);
 
   if (!schema) {
     throw new Error(`Unknown endpointType: ${endpointType}`);
@@ -341,13 +373,13 @@ export const parseCompactConvo = ({
 };
 
 export function parseTextParts(
-  contentParts: a.TMessageContentParts[],
+  contentParts: Array<a.TMessageContentParts | undefined>,
   skipReasoning: boolean = false,
 ): string {
   let result = '';
 
   for (const part of contentParts) {
-    if (!part.type) {
+    if (!part?.type) {
       continue;
     }
     if (part.type === ContentTypes.TEXT) {
@@ -392,26 +424,34 @@ export function findLastSeparatorIndex(text: string, separators = SEPARATORS): n
   return lastIndex;
 }
 
-export function replaceSpecialVars({ text, user }: { text: string; user?: t.TUser | null }) {
+export function replaceSpecialVars({
+  text,
+  user,
+  now: inputNow,
+}: {
+  text: string;
+  user?: t.TUser | null;
+  now?: string | number | Date;
+}) {
   let result = text;
   if (!result) {
     return result;
   }
 
-  // e.g., "2024-04-29 (1)" (1=Monday)
-  const currentDate = dayjs().format('YYYY-MM-DD');
-  const dayNumber = dayjs().day();
-  const combinedDate = `${currentDate} (${dayNumber})`;
-  result = result.replace(/{{current_date}}/gi, combinedDate);
+  const now = inputNow != null ? dayjs(inputNow) : dayjs();
+  const weekdayName = now.format('dddd');
 
-  const currentDatetime = dayjs().format('YYYY-MM-DD HH:mm:ss');
-  result = result.replace(/{{current_datetime}}/gi, `${currentDatetime} (${dayNumber})`);
+  const currentDate = now.format('YYYY-MM-DD');
+  result = result.replace(/{{\s*current_date\s*}}/gi, `${currentDate} (${weekdayName})`);
 
-  const isoDatetime = dayjs().toISOString();
-  result = result.replace(/{{iso_datetime}}/gi, isoDatetime);
+  const currentDatetime = now.format('YYYY-MM-DD HH:mm:ss Z');
+  result = result.replace(/{{\s*current_datetime\s*}}/gi, `${currentDatetime} (${weekdayName})`);
+
+  const isoDatetime = now.toISOString();
+  result = result.replace(/{{\s*iso_datetime\s*}}/gi, isoDatetime);
 
   if (user && user.name) {
-    result = result.replace(/{{current_user}}/gi, user.name);
+    result = result.replace(/{{\s*current_user\s*}}/gi, user.name);
   }
 
   return result;

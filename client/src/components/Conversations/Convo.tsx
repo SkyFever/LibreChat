@@ -47,6 +47,7 @@ export default function Conversation({
   const [hasInteracted, setHasInteracted] = useState(false);
 
   const previousTitle = useRef(title);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (title !== previousTitle.current) {
@@ -109,8 +110,39 @@ export default function Conversation({
     }
   }, [hasInteracted]);
 
+  const handleMouseLeave = useCallback(() => {
+    if (!isPopoverActive) {
+      setHasInteracted(false);
+    }
+  }, [isPopoverActive]);
+
+  const handleBlur = useCallback(
+    (e: React.FocusEvent<HTMLDivElement>) => {
+      // Don't reset if focus is moving to a child element within this container
+      if (e.currentTarget.contains(e.relatedTarget as Node)) {
+        return;
+      }
+      if (!isPopoverActive) {
+        setHasInteracted(false);
+      }
+    },
+    [isPopoverActive],
+  );
+
+  const handlePopoverOpenChange = useCallback((open: boolean) => {
+    setIsPopoverActive(open);
+    if (!open) {
+      requestAnimationFrame(() => {
+        const container = containerRef.current;
+        if (container && !container.contains(document.activeElement)) {
+          setHasInteracted(false);
+        }
+      });
+    }
+  }, []);
+
   const handleNavigation = (ctrlOrMetaKey: boolean) => {
-    if (ctrlOrMetaKey) {
+    if (ctrlOrMetaKey && !isGenerating) {
       toggleNav();
       const baseUrl = window.location.origin;
       const path = `/c/${conversationId}`;
@@ -130,7 +162,6 @@ export default function Conversation({
 
     navigateToConvo(conversation, {
       currentConvoId,
-      resetLatestMessage: !(conversationId ?? '') || conversationId === Constants.NEW_CONVO,
     });
   };
 
@@ -141,14 +172,15 @@ export default function Conversation({
     isActiveConvo,
     conversationId,
     isPopoverActive,
-    setIsPopoverActive,
+    setIsPopoverActive: handlePopoverOpenChange,
     isShiftHeld: isActiveConvo ? isShiftHeld : false,
   };
 
   return (
     <div
+      ref={containerRef}
       className={cn(
-        'group relative flex h-12 w-full items-center rounded-lg md:h-9',
+        'group relative flex h-12 w-full items-center rounded-lg outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-black dark:focus-visible:ring-white md:h-9',
         isActiveConvo || isPopoverActive
           ? 'bg-surface-active-alt before:absolute before:bottom-1 before:left-0 before:top-1 before:w-0.5 before:rounded-full before:bg-black dark:before:bg-white'
           : 'hover:bg-surface-active-alt',
@@ -159,7 +191,9 @@ export default function Conversation({
         title: title || localize('com_ui_untitled'),
       })}
       onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
       onFocus={handleMouseEnter}
+      onBlur={handleBlur}
       onClick={(e) => {
         if (renaming) {
           return;
@@ -244,7 +278,9 @@ export default function Conversation({
         // aria-hidden={!(isPopoverActive || isActiveConvo)}
       >
         {/* Only render ConvoOptions when user interacts (hover/focus) or for active conversation */}
-        {!renaming && (hasInteracted || isActiveConvo) && <ConvoOptions {...convoOptionsProps} />}
+        {!renaming && !isGenerating && (hasInteracted || isActiveConvo) && (
+          <ConvoOptions {...convoOptionsProps} />
+        )}
       </div>
     </div>
   );
